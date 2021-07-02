@@ -105,6 +105,10 @@ int	parse_args(int argc, char **argv)
 
 	while (i < (size_t)argc)
 	{
+		printf("Check [%s]\n", argv[i]);
+
+		if (argv[i + 1] == NULL && !strcmp(argv[i], ";"))
+			break;
 		if (strcmp(argv[i], ";") && strcmp(argv[i], "|"))
 		{
 			args[actu_cmd].tab[j] = ft_strdup(argv[i]);
@@ -113,7 +117,7 @@ int	parse_args(int argc, char **argv)
 		}
 		else if (!(strcmp(argv[i], ";")))
 		{
-			while (!(strcmp(argv[i], ";")) && argv[i + 1])
+			while (!(strcmp(argv[i], ";")) && i + 1 < (size_t)argc)
 				++i;
 			if (args[actu_cmd].tab[0])
 			{
