@@ -7,33 +7,33 @@
 
 typedef struct	s_arg
 {
-	char	*tab[4096];
-	int		is_pipe;
-}		t_arg;
+	char		*tab[4096];
+	int			is_pipe;
+}				t_arg;
 
 
-t_arg	args[4096];
-size_t	nb_args = 0;
-char	**renvp;
+t_arg			args[4096];
+size_t			nb_args = 0;
+char			**renvp;
 
-size_t  ft_strlen(char *str);
+size_t  		ft_strlen(char *str);
 
 /*
 **	UTILS
 */
 
-void	ft_putstr_fd(char *str, int fd)
+void			ft_putstr_fd(char *str, int fd)
 {
 	write(fd, str, ft_strlen(str));
 }
 
-int	exit_fatal()
+int				exit_fatal()
 {
 	ft_putstr_fd("error fatal\n", 2);
 	exit(1);
 }
 
-int     display_error(char *str, char *suffix, int error)
+int     		display_error(char *str, char *suffix, int error)
 {
 	if (!suffix)
 	{
@@ -49,23 +49,22 @@ int     display_error(char *str, char *suffix, int error)
 	return (error);
 }
 
-size_t 	ft_strlen(char *str)
+size_t 			ft_strlen(char *str)
 {
 	size_t i = 0;
 
 	while (str[i])
-	++i;
+		++i;
 	return (i);
 }
 
-char	*ft_strdup(char *str)
+char			*ft_strdup(char *str)
 {
-	size_t i = 0;
+	size_t	i = 0;
 	char	*nstr;
 
 	if (!(nstr = malloc(sizeof(char) * (ft_strlen(str) + 1))))
-	exit_fatal();
-
+		exit_fatal();
 	while (str[i])
 	{
 		nstr[i] = str[i];
@@ -75,16 +74,16 @@ char	*ft_strdup(char *str)
 	return (nstr);
 }
 
-size_t get_arg_len()
+size_t			get_arg_len()
 {
 	size_t i = 0;
 
 	while (args[i].tab[0])
-	++i;
+		++i;
 	return (i);
 }
 
-size_t	ft_tablen(char **tab)
+size_t			ft_tablen(char **tab)
 {
 	size_t i = 0;
 
@@ -97,7 +96,7 @@ size_t	ft_tablen(char **tab)
 **	PARSING
 */
 
-int	parse_args(int argc, char **argv)
+int				parse_args(int argc, char **argv)
 {
 	size_t	actu_cmd = 0;
 	size_t	j = 0;
@@ -105,8 +104,6 @@ int	parse_args(int argc, char **argv)
 
 	while (i < (size_t)argc)
 	{
-		printf("Check [%s]\n", argv[i]);
-
 		if (argv[i + 1] == NULL && !strcmp(argv[i], ";"))
 			break;
 		if (strcmp(argv[i], ";") && strcmp(argv[i], "|"))
@@ -141,7 +138,7 @@ int	parse_args(int argc, char **argv)
 **	EXECUTE
 */
 
-int	cd(char *dir, size_t nb_args)
+int				cd(char *dir, size_t nb_args)
 {
 	if (nb_args != 2)
 		return (display_error("error: cd: bad arguments", NULL, 1));
@@ -153,7 +150,7 @@ int	cd(char *dir, size_t nb_args)
 	return (0);
 }
 
-int	exec_tab(char **tab)
+int				exec_tab(char **tab)
 {
 	int ret = 0;
 
@@ -163,7 +160,7 @@ int	exec_tab(char **tab)
 	exit(ret);
 }
 
-int	multi_pipes(size_t *i)
+int				multi_pipes(size_t *i)
 {
 	int si = dup(STDIN_FILENO);
 	int so = dup(STDOUT_FILENO);
@@ -176,7 +173,6 @@ int	multi_pipes(size_t *i)
 	int	st[4096];
 
 	pid_t pid;
-
 
 
 	// first
@@ -252,7 +248,7 @@ int	multi_pipes(size_t *i)
 	return (0);
 }
 
-int	execute_args(size_t *i)
+int				execute_args(size_t *i)
 {
 	pid_t	pid;
 	int		st;
@@ -283,7 +279,7 @@ int	execute_args(size_t *i)
 **	END
 */
 
-int	free_args()
+int				free_args()
 {
 	size_t i = 0;
 	size_t j = 0;
@@ -302,30 +298,31 @@ int	free_args()
 	return (0);
 }
 
-int main(int argc, char **argv, char **envp)
+int 			main(int argc, char **argv, char **envp)
 {
+	size_t i = 0;
+
 	if (argc <= 1)
 		return (0);
 	renvp = envp;
 	parse_args(argc, argv);
 	nb_args = get_arg_len();
-
-	//printf("NB ARGS = [%ld]\n", nb_args);
-	//for (size_t i = 0; i < (size_t)argc - 1; i++)
-	//{
-	//	for (size_t j = 0; args[i].tab[j]; j++)
-	//	printf("tab[%ld][%ld] = [%s] \r\t\t\t\t|\tIS Pipe [%d]\n", i, j, args[i].tab[j], args[i].is_pipe);
-	//}
-
-	//printf("\n\n\n## EXECUTE ##\n\n\n");
-
-	size_t i = 0;
 	while (i < nb_args)
 	{
 		execute_args(&i);
 		++i;
 	}
-
 	free_args();
 	return (0);
 }
+
+/*
+** printf("NB ARGS = [%ld]\n", nb_args);
+** for (size_t i = 0; i < (size_t)argc - 1; i++)
+** {
+** 	for (size_t j = 0; args[i].tab[j]; j++)
+** 	printf("tab[%ld][%ld] = [%s] \r\t\t\t\t|\tIS Pipe [%d]\n", i, j, args[i].tab[j], args[i].is_pipe);
+** }
+**
+** printf("\n\n\n## EXECUTE ##\n\n\n");
+*/
