@@ -5,224 +5,216 @@
 /*                                                    +:+ +:+         +:+     */
 /*   By: vvaucoul <vvaucoul@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2021/07/01 13:57:46 by vvaucoul          #+#    #+#             */
-/*   Updated: 2021/07/01 17:32:03 by vvaucoul         ###   ########.fr       */
+/*   Created: 2021/10/07 14:26:13 by vvaucoul          #+#    #+#             */
+/*   Updated: 2021/10/19 11:34:40 by vvaucoul         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
-#include "microshell.h"
+#include <unistd.h>
+#include <stdlib.h>
+#include <fcntl.h>
+#include <sys/wait.h>
+#include <string.h>
 
-size_t	nb_args = 0;
-t_arg	args[4096];
-char	**renvp;
+size_t  max_args = 0;
+char    **renvp;
 
-int		parse_args(size_t argc, char **argv)
+/*
+**  UTILS
+*/
+
+size_t ft_tab_len(char **tab)
 {
-	size_t i = 0;
-	size_t current_arg = 0;
+    size_t i = 0;
 
-
-	args[current_arg].args[i] = NULL;
-	args[current_arg].is_pipe = 0;
-
-	for (size_t j = 1; j < argc; j++) {
-		while (!(strcmp(argv[j], ";")) && j + 1 < argc)
-		{
-			++j;
-		}
-		if ((strcmp(argv[j], ";")) && (strcmp(argv[j], "|")))
-		{
-			//printf("Args[%ld][%ld] = [%s]\n", current_arg, i, argv[j]);
-			args[current_arg].args[i] = ft_strdup(argv[j]);
-			args[current_arg].args[i + 1] = NULL;
-			++i;
-		}
-		else if (!(strcmp(argv[j], "|")))
-		{
-			args[current_arg].is_pipe = 1;
-			++current_arg;
-			i = 0;
-			continue;
-		}
-
-		if (j + 1 < argc)
-		if ((strcmp(argv[j], ";") && !strcmp(argv[j + 1], ";")))
-		{
-			++current_arg;
-			args[current_arg].is_pipe = 0;
-			i = 0;
-		}
-	}
-	nb_args = args_len(args);
-	return (0);
+    while (tab[i])
+        ++i;
+    return (i);
 }
 
-int	cd(char *dir, size_t tabsize)
+size_t get_distance(char **cmd, char *str)
 {
-	//printf("CD : %s\n", dir);
-	if (tabsize != 2)
-		return (return_error("error: cd: bad arguments", NULL, 1));
-	else
-		if (chdir(dir) == -1)
-			return (return_error("error: cd: cannot change directory to ", dir, 1));
-	return (0);
+    size_t i = 0;
+    if (!cmd)
+        return (0);
+    while (cmd[i])
+    {
+        if (!(strcmp(cmd[i], str)))
+            return (i);
+        ++i;
+    }
+    return (i);
 }
 
-int	exec_cmd(char **tab)
+int error(char *str)
 {
-	int		ret;
+    size_t i = 0;
 
-	if (strcmp(tab[0], "cd"))
-		ret = execve(tab[0], tab, renvp);
-	else
-		ret = cd(tab[1], ft_tablen(tab));
-	exit(ret);
-	return (ret);
+	while (str[i])
+	{
+        write(STDERR_FILENO, &str[i], 1);
+        ++i;
+    }
+	return (1);
 }
 
-int	exec_pipe(size_t *ca)
+char **find_next_pipe(char **cmd)
 {
-	pid_t	pid;
-	int		nb_pipes = 0;
-
-	pid_t	pids[4096];
-	int		ret[4096];
-
-	int		fds[2];
-	int		fd_prev;
-	int		si;
-	int		so;
-
-
-	si = dup(STDIN_FILENO);
-	so = dup(STDOUT_FILENO);
-
-
-	// first
-	pipe(fds);
-	//printf("Exec Pipe [0] : [%s]\n", args[*ca].args[0]);
-	pid = fork();
-	pids[nb_pipes] = pid;
-	if (!pid)
-	{
-		close(fds[INPUT]);
-		dup2(fds[OUTPUT], STDOUT_FILENO);
-		exit(exec_cmd(args[*ca].args));
-	}
-	close(fds[OUTPUT]);
-	fd_prev = fds[INPUT];
-	++(*ca);
-	++nb_pipes;
-
-
-	// loop
-
-	while (*ca < nb_args && args[*ca].is_pipe)
-	{
-		//printf("Exec Pipe [LOOP] : [%s]\n", args[*ca].args[0]);
-		pipe(fds);
-		pid = fork();
-		pids[nb_pipes] = pid;
-		if (!pid)
-		{
-			close(fds[INPUT]);
-			dup2(fd_prev, STDIN_FILENO);
-			dup2(fds[OUTPUT], STDOUT_FILENO);
-			exit(exec_cmd(args[*ca].args));
-		}
-		close(fds[OUTPUT]);
-		fd_prev = fds[INPUT];
-		++(*ca);
-		++nb_pipes;
-	}
-
-
-	// last
-
-	//printf("Exec Pipe [END] : [%s]\n", args[*ca].args[0]);
-	pid = fork();
-	pids[nb_pipes] = pid;
-	if (!pid)
-	{
-		dup2(fd_prev, STDIN_FILENO);
-		exit(exec_cmd(args[*ca].args));
-	}
-	close(fds[INPUT]);
-
-
-	// wait
-
-	for (size_t i = 0; i < (size_t)nb_pipes; i++) {
-		waitpid(pids[i], &ret[i], 0);
-
-		int r = 0;
-
-		if ((r = WEXITSTATUS(ret[i])))
-		{
-			dup2(si, STDIN_FILENO);
-			dup2(so, STDOUT_FILENO);
-			close(si);
-			close(so);
-			return (r);
-		}
-	}
-
-	dup2(si, STDIN_FILENO);
-	dup2(so, STDOUT_FILENO);
-	close(si);
-	close(so);
-
-	return (0);
+    if (!cmd)
+        return (NULL);
+    size_t i = 0;
+    while (cmd[i])
+    {
+        if (!strcmp(cmd[i], "|"))
+            return (&cmd[i + 1]);
+        ++i;
+    }
+    return (NULL);
 }
 
-int	exec_args(size_t *ca)
+int exit_free(char **free_ptr)
 {
-	int		st;
+	free(free_ptr);
+	error("error: fatal\n");
+	exit(1);
+}
 
-	if (args[*ca].is_pipe)
-		return (exec_pipe(ca));
+/*
+**  CORE
+*/
 
-	pid_t 	pid = fork();
+int builtin_cd(char **cmd)
+{
+    if (ft_tab_len(cmd) != 2)
+        error("error: cd: bad arguments\n");
+    else if (chdir(cmd[1]) < 0)
+    {
+        error("error: cd: cannot change directory to");
+        error(cmd[1]);
+        error("\n");
+    }
+    return (0);
+}
 
-	if (pid < 0)
-		exit_fatal("error: fatal");
-	else if (!pid)
-	{
-		exit(exec_cmd(args[*ca].args));
-	}
-	else
-	{
-		waitpid(pid, &st, 0);
-		if (WEXITSTATUS(st))
-			return (WIFEXITED(st));
-	}
+void exec_cmd(char **cmd, char **to_free)
+{
+    pid_t pid = fork();
 
-	// cd doit s exec en dehors du fork
-	if (!strcmp(args[*ca].args[0], "cd"))
-		cd(args[*ca].args[1], ft_tablen(args[*ca].args));
-	return (0);
+    if (pid == -1)
+        exit_free(to_free);
+    else if (!pid)
+    {
+        if (execve(cmd[0], cmd, renvp) < 0)
+        {
+            error("error: cannot execute ");
+			error(cmd[0]);
+			error("\n");
+			free(to_free);
+			exit(1);
+        }
+    }
+    waitpid(0, NULL, 0);
+}
+
+int execute(char **cmd)
+{
+    // no pipes
+    if (!(find_next_pipe(cmd)))
+    {
+        exec_cmd(cmd, cmd);
+        return (0);
+    }
+
+    // pipes
+    int fd_in = dup(STDIN_FILENO);
+    if (fd_in < 0)
+        exit_free(cmd);
+
+    size_t nb_childs = 0;
+    char **tmp = cmd;
+
+    while (tmp)
+    {
+        int fd_pipe[2];
+        if (pipe(fd_pipe) < 0)
+            exit_free(cmd);
+
+        pid_t pid = fork();
+        if (pid == -1)
+            exit_free(cmd);
+        else if (!pid)
+        {
+            if (dup2(fd_in, STDIN_FILENO) < 0)
+                exit_free(cmd);
+            if (find_next_pipe(tmp) && dup2(fd_pipe[1], STDOUT_FILENO) < 0)
+                exit_free(cmd);
+
+            close (fd_in);
+            close(fd_pipe[0]);
+            close(fd_pipe[1]);
+
+            tmp[get_distance(tmp, "|")] = NULL;
+            exec_cmd(tmp, cmd);
+            free(cmd);
+            exit(0);
+        }
+        else
+        {
+            if (dup2(fd_pipe[0], fd_in) < 0)
+                exit_free(cmd);
+            close(fd_pipe[0]);
+            close(fd_pipe[1]);
+            ++nb_childs;
+            tmp = find_next_pipe(tmp);
+        }
+    }
+    close (fd_in);
+    while (nb_childs > 0)
+    {
+        waitpid(0, NULL, 0);
+        --nb_childs;
+    }
+    return (0);
+}
+
+int parse_args(char **argv)
+{
+    size_t i = 0;
+
+    while (++i <= max_args)
+    {
+        size_t dist = get_distance(&argv[i], ";");
+        if (!dist)
+            continue;
+        char **current_cmds = NULL;
+
+        if (!(current_cmds = malloc(sizeof(char *) * (dist + 1))))
+            exit_free(NULL);
+
+        size_t j = 0;
+        while (j < dist)
+        {
+            current_cmds[j] = argv[i + j];
+            ++j;
+        }
+        current_cmds[j] = NULL;
+
+        i += dist;
+
+        if (!strcmp(current_cmds[0], "cd"))
+            builtin_cd(current_cmds);
+        else
+            execute(current_cmds);
+        free(current_cmds);
+        current_cmds = NULL;
+    }
+    return (0);
 }
 
 int main(int argc, char **argv, char **envp)
 {
-	renvp = envp;
-	if (argc < 2)
-		return (0);
-	parse_args(argc, argv);
-
-
-	//printf("\n\n\t- NB Args = [%ld]\n", nb_args);
-
-	for (size_t i = 0; i <= nb_args; i++) {
-		for (size_t j = 0; args[i].args[j]; j++) {
-			//printf("Args[%ld][%ld] = [%s]\t|\t is_pipe [%d]\n", i, j, args[i].args[j], args[i].is_pipe);
-		}
-	}
-
-	//printf("\n\n\t- EXEC \n");
-	for (size_t i = 0; i < nb_args; i++) {
-		exec_args(&i);
-	}
-
-	return (0);
+    renvp = envp;
+    max_args = argc - 1;
+    parse_args(argv);
+    return (0);
 }
