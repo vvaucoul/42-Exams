@@ -16,6 +16,6 @@ public:
     ~TargetGenerator();
 
     void learnTargetType(ATarget *target_ptr);
-    void forgetTargetType(std::string const &name);
-    ATarget* createTarget(std::string const &name);
+    void forgetTargetType(std::string const &type);
+    ATarget* createTarget(std::string const &type);
 };

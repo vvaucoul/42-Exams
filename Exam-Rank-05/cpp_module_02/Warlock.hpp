@@ -7,27 +7,27 @@
 
 class Warlock
 {
-    private:
-        std::string _name;
-        std::string _title;
+private:
+    std::string _name;
+    std::string _title;
 
-        Warlock();
-        Warlock(Warlock const &other);
-        Warlock &operator=(Warlock const &other);
+    Warlock();
+    Warlock(Warlock const &other);
+    Warlock &operator=(Warlock const &other);
 
-        SpellBook _book;
-    public:
-        Warlock(std::string const &name, std::string const &title);
-        ~Warlock();
+    SpellBook _book;
+public:
+    Warlock(std::string const &name, std::string const &title);
+    ~Warlock();
 
-        std::string const &getName() const;
-        std::string const &getTitle() const;
+    std::string const &getName() const;
+    std::string const &getTitle() const;
 
-        void setTitle(std::string const &title);
+    void setTitle(std::string const &title);
 
-        void introduce() const;
+    void introduce() const;
 
-        void learnSpell(ASpell *spell);
-        void forgetSpell(std::string name);
-        void launchSpell(std::string name, ATarget const &target);
+    void learnSpell(ASpell *spell);
+    void forgetSpell(std::string name);
+    void launchSpell(std::string name, ATarget const &target);
 };
