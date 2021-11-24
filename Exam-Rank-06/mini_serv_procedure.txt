@@ -1,0 +1,128 @@
+### 1 ###
+
+Initialiser structure client
+						-> fd
+						-> id
+						-> ptr next
+
+Initialiser variables:
+						-> [t_client] global_clients
+						-> [int] sock_fd global_id
+						-> [fd_set] current_socket cpy_read cpy_write
+						-> [char] msg[42]
+						-> [char] str[42 * 4096] tmp[42 * 4096] buf[42 * 4096 + 42]
+
+
+### 2 ###
+
+fonctions:
+
+void fatal() ## quitter brutalement le programme
+	Ecrire fatal error, fermer sock_fd et exit(1)
+
+int get_id(int fd) ## return id de client si fd == tmp->fd
+	tant que tmp != NULL
+		si tmp->fd == fd -> return tmp->id
+	return -1
+
+int get_max_fd() ## récupérer le plus grand fd
+	tant que tmp != NULL
+		si tmp->fd > max
+		max_fd = tmp->fd
+	return max
+
+void send_all(int fd, char *str) ## envoyer un message à tous les clients sauf le fd qui envoie
+	tant que tmp
+		si tmp->fd != fd && FD_ISSET(tmp->fd, &cpy_write)
+			if (send(tmp->fd, str, strlen(str, 0)) < 0)
+				fatal()
+
+int add_client_to_list(int fd) ## ajoute un nouveau client a la liste chainee
+	new = calloc(1, sizeof(t_client))
+	new->id = global_id++
+	new->fd = fd
+	new->next = NULL;
+	si !clients alors clients = new
+	sinon -> ajouter new_client a la fin de clients
+	return (new->id)
+
+void add_client() ## accepte un nouveau client / envoie le message d'accueil a tous les autres
+	client_fd = accept(sock_fd, (struct socckaddr *)&clientaddr, &len)
+	sprintf(msg, "server: client %d just arrived\n", add_client_to_list(client_fd))
+	send_all(client_fd, msg);
+	FD_SET(client_fd, &current_socket);
+
+int remove_client(int fd) ## retirer client
+	si tmp && tmp->fd == fd
+		clients = tmp->next
+		free(tmp)
+	sinon
+		tant que tmp && tmp->next && tmp->next->fd != fd
+			tmp = tmp->next
+		delete = tmp->next
+		tmp->next = tmp->next->next
+		free(delete)
+	return (id)
+
+void ex_msg(int fd) ## envoyer un message a tout le monde
+	tant que str[i]
+		tmp[j] = str[i]
+		++j
+		si str[i] == \n
+			sprintf(buf, "client %d: %s", get_id(fd), tmp);
+			send_all(fd, buf)
+			j = 0
+			bzero(&tmp, strlen(tmp));
+			bzero(&buf, strlen(buf));
+		++i
+	bzero(&str, strlen(str));
+
+### 3 ###
+
+main:
+
+int main(int argc, char **argv)
+{
+	si argc != 2
+		write(2, "Wrong number of arguments\n", 26);
+		exit(1);
+
+	bzero srvaddr
+
+	servaddr.sin_family = AF_INET;
+	servaddr.sin_addr.s_addr = htonl(2130706433);
+	servaddr.sin_port = htons(port);
+
+	sock_fd = socket(AF_INET, SOCK_STREAM, 0)
+	bind(sock_fd, &servaddr, sizeof(servaddr))
+	listen(sock_fd, 0)
+
+
+	FD_ZERO(&current_socket);
+	FD_SET(sock_fd, &current_socket);
+
+	bzero tmp
+	bzero buf
+	bzero str
+
+	while (1)
+		cpy_write = cpy_read = current_socket
+		select(get_max_fd() + 1, &cpy_read, &cpy_write, NULL, NULL)
+		for (int fd = 0; fd <= get_max_fd(); fd++)
+			si FD_ISSER(fd, &cpy_read)
+				si fd == sock_fd
+					bzero msg
+					add_client();
+					break
+				sinon
+					si recv(fd, str, sizeof(str), 0) <= 0
+						bzero msg
+						sprintf msg "server: client %d just left\n", remove_client(fd)
+						send_all(fd, msg)
+						FD_CLR(fd, &current_socket)
+						close(fd)
+						break;
+					sinon
+						ex_msg(fd)
+	return (0)
+}
