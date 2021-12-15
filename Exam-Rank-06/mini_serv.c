@@ -33,7 +33,7 @@ int		get_id(int fd)
 	while (tmp)
 	{
 		if (tmp->fd == fd)
-			return (tmp->id);
+		return (tmp->id);
 		tmp = tmp->next;
 	}
 	return (-1);
@@ -47,7 +47,7 @@ int	get_max_fd()
 	while (tmp)
 	{
 		if (tmp->fd > max)
-			max = tmp->fd;
+		max = tmp->fd;
 		tmp = tmp->next;
 	}
 	return (max);
@@ -62,7 +62,7 @@ void send_all(int fd, char *str)
 		if (tmp->fd != fd && FD_ISSET(tmp->fd, &cpy_write))
 		{
 			if (send(tmp->fd, str, strlen(str), 0) < 0)
-				fatal();
+			fatal();
 		}
 		tmp = tmp->next;
 	}
@@ -74,16 +74,16 @@ int add_client_to_list(int fd)
 	t_client *new;
 
 	if (!(new = calloc(1, sizeof(t_client))))
-		fatal();
+	fatal();
 	new->id = g_id++;
 	new->fd = fd;
 	new->next = NULL;
 	if (!(clients))
-		clients = new;
+	clients = new;
 	else
 	{
 		while (tmp->next)
-			tmp = tmp->next;
+		tmp = tmp->next;
 		tmp->next = new;
 	}
 	return (new->id);
@@ -96,7 +96,7 @@ void add_client()
 	int client_fd;
 
 	if ((client_fd = accept(sock_fd, (struct sockaddr *)&clientaddr, &len)) < 0)
-		fatal();
+	fatal();
 	sprintf(msg, "server: client %d just arrived\n", add_client_to_list(client_fd));
 	send_all(client_fd, msg);
 	FD_SET(client_fd, &current_socket);
@@ -116,7 +116,7 @@ int remove_client(int fd)
 	else
 	{
 		while (tmp && tmp->next && tmp->next->fd != fd)
-			tmp = tmp->next;
+		tmp = tmp->next;
 		delete = tmp->next;
 		tmp->next = tmp->next->next;
 		free(delete);
@@ -161,11 +161,11 @@ int main(int argc, char **argv)
 	servaddr.sin_port = htons(port);
 
 	if ((sock_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-		fatal();
+	fatal();
 	if (bind(sock_fd, (const struct sockaddr *) &servaddr, sizeof(servaddr)) < 0)
-		fatal();
+	fatal();
 	if (listen(sock_fd, 0) < 0)
-		fatal();
+	fatal();
 
 	FD_ZERO(&current_socket);
 	FD_SET(sock_fd, &current_socket);
@@ -177,7 +177,7 @@ int main(int argc, char **argv)
 	{
 		cpy_write = cpy_read = current_socket;
 		if (select(get_max_fd() + 1, &cpy_read, &cpy_write, NULL, NULL) < 0)
-			continue;
+		continue;
 		for (int fd = 0; fd <= get_max_fd(); fd++) {
 			if (FD_ISSET(fd, &cpy_read))
 			{
@@ -199,7 +199,7 @@ int main(int argc, char **argv)
 						break;
 					}
 					else
-						ex_msg(fd);
+					ex_msg(fd);
 				}
 			}
 		}
