@@ -162,7 +162,6 @@ void loop_server()
 			{
 				if (fd == sock_fd)
 				{
-					bzero(&msg, sizeof(msg));
 					add_client();
 					break;
 				}
