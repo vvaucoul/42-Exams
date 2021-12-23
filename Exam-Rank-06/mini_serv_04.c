@@ -6,28 +6,26 @@
 #include <sys/socket.h>
 #include <sys/select.h>
 #include <netinet/in.h>
+#include <fcntl.h>
 
 typedef struct s_client
 {
-	int			fd;
-	int			id;
+	int id;
+	int fd;
 	struct s_client *next;
-} t_client;
+}	t_client;
 
 t_client *clients = NULL;
-int sock_fd = -1, g_id = 0;
+int sockfd = -1, g_id = 0;
 fd_set current_socket, sock_read, sock_write;
-char msg[42];
-char str[42 * 4096], tmp [42 * 4096], buf[42 * 4096 + 42];
 
-int get_max_fd();
-int remove_client(int fd);
+char msg[42], str[42 * 4096], buff[42 * 4096 + 42], tmp[42 * 4096];
 
 void	exit_fatal()
 {
 	write(2, "Fatal error\n", strlen("Fatal error\n"));
-	if (sock_fd != -1)
-		close(sock_fd);
+	if (sockfd != -1)
+		close(sockfd);
 	exit(1);
 }
 
@@ -46,7 +44,7 @@ int get_id(int fd)
 
 int get_max_fd()
 {
-	int max = sock_fd;
+	int max = sockfd;
 	t_client *tmp = clients;
 
 	while (tmp)
@@ -96,20 +94,6 @@ int add_client_to_list(int fd)
 	return (new->id);
 }
 
-void add_client()
-{
-	struct sockaddr clientaddr;
-	socklen_t len = sizeof(clientaddr);
-	int client_fd;
-
-	if ((client_fd = accept(sock_fd, (struct sockaddr *) &clientaddr, &len)) < 0)
-		exit_fatal();
-	bzero(&msg, sizeof(msg));
-	sprintf(msg, "server: client %d just arrived\n", add_client_to_list(client_fd));
-	send_all(client_fd, msg);
-	FD_SET(client_fd, &current_socket);
-}
-
 int remove_client(int fd)
 {
 	t_client *tmp = clients;
@@ -132,6 +116,20 @@ int remove_client(int fd)
 	return (id);
 }
 
+void add_client()
+{
+	struct sockaddr clientaddr;
+	socklen_t len = sizeof(clientaddr);
+	int client_fd;
+
+	if ((client_fd = accept(sockfd, (struct sockaddr *) &clientaddr, &len)) < 0)
+		exit_fatal();
+	//fcntl(client_fd, F_SETFL, O_NONBLOCK);	// remove when connected
+	sprintf(msg, "server: client %d just arrived\n", add_client_to_list(client_fd));
+	send_all(client_fd, msg);
+	FD_SET(client_fd, &current_socket);
+}
+
 void ex_msg(int fd)
 {
 	int i = 0;
@@ -143,11 +141,11 @@ void ex_msg(int fd)
 		++j;
 		if (str[i] == '\n')
 		{
-			sprintf(buf, "client %d: %s", get_id(fd), tmp);
-			send_all(fd, tmp);
+			sprintf(buff, "client %d: %s", get_id(fd), tmp);
+			send_all(fd, buff);
 			j = 0;
 			bzero(&tmp, strlen(tmp));
-			bzero(&buf, strlen(buf));
+			bzero(&buff, strlen(buff));
 		}
 		++i;
 	}
@@ -161,48 +159,42 @@ void loop_server()
 		sock_write = sock_read = current_socket;
 		if ((select(get_max_fd() + 1, &sock_read, &sock_write, NULL, NULL)) < 0)
 			continue;
+		if (FD_ISSET(sockfd, &sock_read))
+			add_client();
+
 		for (int fd = 0; fd <= get_max_fd(); fd++) {
 			if (FD_ISSET(fd, &sock_read))
 			{
-				if (fd == sock_fd)
+				int recv_ret = 1000;
+
+				while (recv_ret == 1000 || str[strlen(str) - 1] != '\n')
 				{
-					add_client();
-					break;
+					recv_ret = recv(fd, str + strlen(str), 1000, 0);
+					if (recv_ret <= 0)
+						break;
+				}
+
+				if (recv_ret == 0)
+				{
+					bzero(&msg, sizeof(msg));
+					sprintf(msg, "server: client %d just left\n", remove_client(fd));
+					send_all(fd, msg);
+					close(fd);
+					FD_CLR(fd, &current_socket);
 				}
 				else
-				{
-					int recv_ret = 1000;
-
-					while (recv_ret == 1000 || str[strlen(str) - 1] != '\n')
-					{
-						recv_ret = recv(fd, str + strlen(str), 1000, 0 );
-						if (recv_ret <= 0)
-							break;
-					}
-					if (recv_ret <= 0)
-					{
-						bzero(&msg, sizeof(msg));
-						sprintf(msg, "server: client %d just left\n", remove_client(fd));
-						send_all(fd, msg);
-						FD_CLR(fd, &current_socket);
-						close(fd);
-						break;
-					}
-					else
-						ex_msg(fd);
-				}
+					ex_msg(fd);
 			}
 		}
 	}
 }
 
+// INIT SERVER //
+
 void init_values()
 {
 	FD_ZERO(&current_socket);
-	FD_SET(sock_fd, &current_socket);
-	bzero(&tmp, sizeof(tmp));
-	bzero(&buf, sizeof(buf));
-	bzero(&str, sizeof(str));
+	FD_SET(sockfd, &current_socket);
 }
 
 void init_server(uint16_t port)
@@ -214,13 +206,15 @@ void init_server(uint16_t port)
 	servaddr.sin_addr.s_addr = htonl(2130706433); //127.0.0.1
 	servaddr.sin_port = htons(port);
 
-	if ((sock_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+	if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
 		exit_fatal();
-	if (bind(sock_fd, (const struct sockaddr *) &servaddr, sizeof(servaddr)) < 0)
+	if (bind(sockfd, (const struct sockaddr *) &servaddr, sizeof(servaddr)) != 0)
 		exit_fatal();
-	if (listen(sock_fd, 0) < 0)
+	if (listen(sockfd, 0) != 0)
 		exit_fatal();
 }
+
+// MAIN //
 
 int main(int argc, char **argv)
 {
@@ -232,5 +226,4 @@ int main(int argc, char **argv)
 	init_server(atoi(argv[1]));
 	init_values();
 	loop_server();
-	return (0);
 }
