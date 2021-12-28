@@ -31,7 +31,8 @@
 * Votre programme n'est pas censé fonctionner sans la fonction fcntl donnée dans le sujet. Si c'est le cas, vous aurez un fail au test 9
 * N'oubliez pas d'enlever la fonction fcntl avant de 'grademe' sinon, -42
 * L'utilisation d'une structure client est indispensable pour cet exam
-* L'utilisation de variables globales est recommandé afin d'éviter de perdre du temps. 
+* L'utilisation de variables globales est recommandé afin d'éviter de perdre du temps.
+* Lors d'un grademe, chaque 'waiting...' correspond à un test effectué.
 
 > * Linux: netcat 0.0.0.0 [Port] 
 > * Mac: nc 0.0.0.0 [Port] 
