@@ -1,125 +1,85 @@
-/* ************************************************************************** */
-/*                                                                            */
-/*                                                        :::      ::::::::   */
-/*   mini_serv.c                                        :+:      :+:    :+:   */
-/*                                                    +:+ +:+         +:+     */
-/*   By: vvaucoul <vvaucoul@student.42.fr>          +#+  +:+       +#+        */
-/*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2021/12/15 13:40:54 by vvaucoul          #+#    #+#             */
-/*   Updated: 2021/12/15 16:43:26 by vvaucoul         ###   ########.fr       */
-/*                                                                            */
-/* ************************************************************************** */
-
-#include <errno.h>
 #include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <netdb.h>
 #include <sys/socket.h>
+#include <sys/select.h>
 #include <netinet/in.h>
-#include <stdlib.h>
-#include <string.h>
+#include <fcntl.h>
 
-# include <stdio.h>
-
-typedef struct s_client {
-	struct s_client *next;
-	int fd;
+typedef struct s_client
+{
 	int id;
+	int fd;
+	struct s_client *next;
 }	t_client;
 
-t_client *clients; // List clients
-int		sockfd = 0, max_id = 0; // srv socket FD | max id
-fd_set	current_socket, sock_read, sock_write; // current socket, read, write
-char	msg[42];
-char	str[42 * 4096], tmp[42 * 4096], buf[42 * 4096 + 42];
+t_client *clients = NULL;
+int sockfd = -1, g_id = 0;
+fd_set current_socket, sock_read, sock_write;
+
+char msg[42];
+
+// SUBJECT MAIN //
+
+int extract_message(char **buf, char **msg)
+{
+	char	*newbuf;
+	int	i;
+
+	*msg = 0;
+	if (*buf == 0)
+		return (0);
+	i = 0;
+	while ((*buf)[i])
+	{
+		if ((*buf)[i] == '\n')
+		{
+			newbuf = calloc(1, sizeof(*newbuf) * (strlen(*buf + i + 1) + 1));
+			if (newbuf == 0)
+				return (-1);
+			strcpy(newbuf, *buf + i + 1);
+			*msg = *buf;
+			(*msg)[i + 1] = 0;
+			*buf = newbuf;
+			return (1);
+		}
+		i++;
+	}
+	return (0);
+}
+
+char *str_join(char *buf, char *add)
+{
+	char	*newbuf;
+	int		len;
+
+	if (buf == 0)
+		len = 0;
+	else
+		len = strlen(buf);
+	newbuf = malloc(sizeof(*newbuf) * (len + strlen(add) + 1));
+	if (newbuf == 0)
+		return (0);
+	newbuf[0] = 0;
+	if (buf != 0)
+		strcat(newbuf, buf);
+	free(buf);
+	strcat(newbuf, add);
+	return (newbuf);
+}
 
 // UTILS //
 
-// Exit fatal
-// Fatal error && close sockfd
-void 	exit_fatal()
+void	exit_fatal()
 {
 	write(2, "Fatal error\n", strlen("Fatal error\n"));
-	close(sockfd);
+	if (sockfd != -1)
+		close(sockfd);
 	exit(1);
 }
-// return max fd from all clients
-int get_max_fd()
-{
-	int max_fd = sockfd;
-	t_client *tmp = clients;
 
-	while (tmp)
-	{
-		if (tmp->fd > max_fd)
-			max_fd = tmp->fd;
-		tmp = tmp->next;
-	}
-	return (max_fd);
-}
-
-// Send msg to all except sender
-// check if fd != client fd && client fd is set to sock_write
-// send to client fd, str
-void send_all(int fd, char *str)
-{
-	t_client *tmp = clients;
-
-	while (tmp)
-	{
-		if (tmp->fd != fd && FD_ISSET(tmp->fd, &sock_write))
-		{
-			if (send(tmp->fd, str, strlen(str), 0) < 0)
-				exit_fatal();
-		}
-		tmp = tmp->next;
-	}
-}
-
-// Add client to end of the list
-// Init new client -> calloc & init ID FD & next to NULL
-// add new to end of the clients
-// if clients == NULL clients = new;
-int	 add_client_to_list(int fd)
-{
-	t_client *tmp = clients;
-	t_client *new;
-
-	if (!(new = calloc(1, sizeof(t_client))))
-		exit_fatal();
-	new->id = max_id;
-	++max_id;
-	new->fd = fd;
-	new->next = NULL;
-	if (!clients)
-		clients = new;
-	else
-	{
-		while (tmp->next)
-			tmp = tmp->next;
-		tmp->next = new;
-	}
-	return (new->id);
-}
-
-// Add client
-// accept new client
-// add client to list & send all
-void add_client()
-{
-	struct sockaddr_in clientaddr;
-	socklen_t len = sizeof(clientaddr);
-	int client_fd;
-
-	if ((client_fd = accept(sockfd, (struct sockaddr *) &clientaddr, &len)) < 0)
-		exit_fatal();
-	bzero(&msg, sizeof(msg));
-	sprintf(msg, "server: client %d just arrived\n", add_client_to_list(client_fd));
-	send_all(client_fd, msg);
-	FD_SET(client_fd, &current_socket);
-}
-
-// Get id from clients, compare with fd
 int get_id(int fd)
 {
 	t_client *tmp = clients;
@@ -133,11 +93,64 @@ int get_id(int fd)
 	return (-1);
 }
 
+int get_max_fd()
+{
+	int max = sockfd;
+	t_client *tmp = clients;
+
+	while (tmp)
+	{
+		if (tmp->fd > max)
+			max = tmp->fd;
+		tmp = tmp->next;
+	}
+	return (max);
+}
+
+// CLIENT PART //
+
+void send_all(int fd, char *str_to_send)
+{
+	t_client *tmp = clients;
+
+	while (tmp)
+	{
+		if (tmp->fd != fd && FD_ISSET(tmp->fd, &sock_write))
+		{
+			if ((send(tmp->fd, str_to_send, strlen(str_to_send), 0) < 0))
+				exit_fatal();
+		}
+		tmp = tmp->next;
+	}
+}
+
+int add_client_to_list(int fd)
+{
+	t_client *tmp = clients;
+	t_client *new = NULL;
+
+	if (!(new = calloc(1, sizeof(t_client))))
+		exit_fatal();
+
+	new->id = g_id++;
+	new->fd = fd;
+	new->next = NULL;
+
+	if (!clients)
+		clients = new;
+	else
+	{
+		while (tmp->next)
+			tmp = tmp->next;
+		tmp->next = new;
+	}
+	return (new->id);
+}
+
 int remove_client(int fd)
 {
 	t_client *tmp = clients;
-	t_client *to_delete;
-
+	t_client *to_delete = NULL;
 	int id = get_id(fd);
 
 	if (tmp && tmp->fd == fd)
@@ -156,79 +169,100 @@ int remove_client(int fd)
 	return (id);
 }
 
-// send msg to clients
-// truncate string at each \n
-void ex_msg(int fd)
+void add_client()
 {
-	int i = 0;
-	int j = 0;
+	struct sockaddr clientaddr;
+	socklen_t len = sizeof(clientaddr);
+	int client_fd;
 
-	while (str[i])
-	{
-		tmp[j] = str[i];
-		j++;
-		if (str[i] == '\n')
-		{
-			sprintf(buf, "client %d: %s", get_id(fd), tmp);
-			send_all(fd, buf);
-			j = 0;
-			bzero(&tmp, strlen(tmp));
-			bzero(&buf, strlen(buf));
-		}
-		i++;
-	}
-	bzero(&str, strlen(str));
+	if ((client_fd = accept(sockfd, (struct sockaddr *) &clientaddr, &len)) < 0)
+		exit_fatal();
+	fcntl(client_fd, F_SETFL, O_NONBLOCK);	// remove before grademe
+	sprintf(msg, "server: client %d just arrived\n", add_client_to_list(client_fd));
+	send_all(client_fd, msg);
+	FD_SET(client_fd, &current_socket);
 }
 
-// LOOP //
+// SERVER PART //
 
-int loop_server()
+void loop_server()
 {
+	t_client *tmp;
+	char *message = NULL;
 	while (1)
 	{
 		sock_write = sock_read = current_socket;
-		if (select(get_max_fd() + 1, &sock_read, &sock_write, NULL, NULL) < 0)
+		if ((select(get_max_fd() + 1, &sock_read, &sock_write, NULL, NULL)) < 0)
 			continue;
-		for (int fd = 0; fd <= get_max_fd(); fd++) {
+		if (FD_ISSET(sockfd, &sock_read))
+			add_client();
+
+		tmp = clients;
+		while (tmp)
+		{
+			int id = tmp->id;
+			int fd = tmp->fd;
+			tmp = tmp->next;
+
 			if (FD_ISSET(fd, &sock_read))
 			{
-				if (fd == sockfd)
+				int size = 0;
+				int max_size = 0;
+				char msg_buffer[4096];
+
+				bzero(&msg_buffer, sizeof(msg_buffer));
+				while ((size = recv(fd, msg_buffer, 4095, 0)) > 0)
 				{
-					add_client();
-					break;
+					msg_buffer[size] = 0;
+					max_size += size;
+					message = str_join(message, msg_buffer);
+					bzero(&msg_buffer, sizeof(msg_buffer));
 				}
-				else
+				if (max_size == 0)
 				{
-					if (recv(fd, str, sizeof(str), 0) <= 0)
+					id = remove_client(fd);
+					if (id != -1)
 					{
 						bzero(&msg, sizeof(msg));
-						sprintf(msg, "server: client %d just left\n", remove_client(fd));
+						sprintf(msg, "server: client %d just left\n", id);
 						send_all(fd, msg);
-						FD_CLR(fd, &current_socket);
-						close(fd);
-						break;
 					}
-					else
-						ex_msg(fd);
+					close(fd);
+					FD_CLR(fd, &current_socket);
 				}
+				else if (max_size > 0)
+				{
+					char *current_msg = NULL;
+					char *tmpchar = NULL;
+					while (extract_message(&message, &current_msg))
+					{
+						if ((!(tmpchar = malloc(sizeof(char) * (42 + strlen(current_msg))))))
+							exit_fatal();
+						sprintf(tmpchar, "client %d: %s", id, current_msg);
+						send_all(fd, tmpchar);
+						free(tmpchar);
+						free(current_msg);
+						tmpchar = NULL;
+						current_msg = NULL;
+					}
+				}
+				free(message);
+				message = NULL;
 			}
 		}
+
 	}
 }
 
-// INIT //
+// INIT SERVER //
 
-int init_values()
+void init_values()
 {
 	FD_ZERO(&current_socket);
 	FD_SET(sockfd, &current_socket);
-	bzero(&tmp, sizeof(tmp));
-	bzero(&buf, sizeof(buf));
-	bzero(&str, sizeof(str));
-	return (0);
 }
 
-int init_server(uint16_t port)
+void init_server(uint16_t port)
 {
 	struct sockaddr_in servaddr;
 
@@ -239,16 +273,15 @@ int init_server(uint16_t port)
 
 	if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
 		exit_fatal();
-	if (bind(sockfd, (const struct sockaddr *) &servaddr, sizeof(servaddr)) < 0)
+	if (bind(sockfd, (const struct sockaddr *) &servaddr, sizeof(servaddr)) != 0)
 		exit_fatal();
-	if (listen(sockfd, 0) < 0)
+	if (listen(sockfd, 0) != 0)
 		exit_fatal();
-	return (0);
 }
 
 // MAIN //
 
-int main(int argc, char const *argv[])
+int main(int argc, char **argv)
 {
 	if (argc != 2)
 	{
@@ -258,5 +291,4 @@ int main(int argc, char const *argv[])
 	init_server(atoi(argv[1]));
 	init_values();
 	loop_server();
-	return (0);
 }
